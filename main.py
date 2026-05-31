@@ -3,26 +3,33 @@ import json
 import logging
 import httpx
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Query
-from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional, List
+from pydantic import BaseModel
+from typing import Dict, List
 from supabase import create_client, Client
 
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Environment Variables
-VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "your_secure_verify_token")
-WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "your_meta_graph_api_token")
-PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID", "your_sender_phone_id")
-MERCHANT_PHONE = os.environ.get("MERCHANT_PHONE", "your_merchant_number")
+# Environment Variables - Aligned specifically with your Render dashboard keys
+VERIFY_TOKEN = os.environ.get("META_VERIFY_TOKEN", "Aryan@1012")
+WHATSAPP_TOKEN = os.environ.get("META_API_TOKEN", "temporary_token")
+PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID", "123456789")
+MERCHANT_PHONE = os.environ.get("MERCHANT_PHONE", "919999999999") 
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "your_supabase_url")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "your_supabase_service_key")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://placeholder-url.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "placeholder_key")
 
 # Initialize Clients
 app = FastAPI(title="B2B WhatsApp Order Router")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Safe initialization to prevent Uvicorn from crashing (Exit Status 1) on startup
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    logger.info("Supabase client initialized successfully.")
+except Exception as e:
+    logger.error(f"CRITICAL: Failed to initialize Supabase client. Check your URL. Error: {e}")
+    supabase = None
 
 # --- Pydantic Models for Business Logic ---
 
@@ -88,6 +95,10 @@ async def send_whatsapp_text(to: str, text: str):
 
 async def process_new_flow_order(customer_phone: str, flow_data: str):
     """Handles SUBMITTED -> MERCHANT_REVIEW routing."""
+    if not supabase:
+        logger.error("Cannot process order: Supabase client is not connected.")
+        return
+
     try:
         # 1. Parse Flow JSON
         parsed_flow = json.loads(flow_data)
@@ -126,6 +137,9 @@ async def process_new_flow_order(customer_phone: str, flow_data: str):
 
 async def process_merchant_action(button_id: str):
     """Handles MERCHANT_REVIEW -> COUNTER_OFFER routing."""
+    if not supabase:
+        return
+
     try:
         action, order_id = button_id.split("_", 1)
         
@@ -164,7 +178,7 @@ async def verify_webhook(
 ):
     """Handles Meta's initial verification handshake."""
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
-        logger.info("Webhook verified successfully!")
+        logger.info("Webhook verified successfully by Meta!")
         return int(hub_challenge)
     raise HTTPException(status_code=403, detail="Verification failed")
 
